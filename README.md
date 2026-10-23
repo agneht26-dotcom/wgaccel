@@ -4,20 +4,24 @@ Faster world generation for Minecraft 1.21.1 (NeoForge), built first for **FreeT
 same, block for block: every speed-up is checked against Minecraft's and FreeTerraForged's own results while you
 play, and a part whose answer differs turns itself off and the game carries on with the normal code.
 
-On the test PC it made Chunky pregeneration with FreeTerraForged **3.1x faster** (radius 1000: 2:23 -> 0:46).
+On the test PC it made Chunky pregeneration with FreeTerraForged **3.1x faster** (radius 1000: 2:23 -> 0:46), and
+**4.3x faster** on a PC with an AMD Radeon RX 9070 XT (4:20 -> 1:00).
 
 > [!WARNING]
 > **This mod is AI-generated.** All of its code, these instructions and its config descriptions were written by
-> Claude (an AI made by Anthropic), directed and tested in game by one person. It has been tested on one PC only (below).
+> Claude (an AI made by Anthropic), directed and tested in game by one person. It has been tested on three PCs only (below).
 > It changes how chunks are generated, so **back up your worlds**, try it on a copy first, and report problems with your
 > log (`logs/latest.log`). The self-checks catch a wrong result and turn that part off, but no check catches everything.
 
 > [!WARNING]
-> **The GPU parts work only on NVIDIA graphics cards (CUDA), and were tested only on an RTX 3080.** Cards from the
-> GTX 10xx (compute capability 6.0) to the newest are supported: each card gets code compiled for its own
-> architecture. On cards other than the RTX 3080 they **may not work, or may crash the game**. On AMD or Intel cards,
-> or without the CUDA Toolkit, the mod still runs with its CPU improvements only. A chat message says this when you
-> join a world; turn it off with `gpuTestedWarning = false` in the config.
+> **The GPU parts run on NVIDIA cards (CUDA) and, since 0.16.0, on AMD cards under Windows (HIP).** They
+> were tested on an NVIDIA RTX 3080, an AMD Radeon RX 9070 XT and an AMD Radeon 680M (a laptop's integrated graphics)
+> only. NVIDIA cards from
+> the GTX 10xx (compute capability 6.0) to the newest are supported, and each card, NVIDIA or AMD, gets code compiled
+> for its own architecture. On other cards the GPU parts **may not work, or may crash the game**. On Intel cards, on
+> AMD cards under Linux, or without the CUDA Toolkit (NVIDIA) or the HIP SDK (AMD), the mod still runs with its CPU
+> improvements only. A chat message says this when you join a world; turn it off with `gpuTestedWarning = false` in
+> the config.
 
 > [!IMPORTANT]
 > **Not together with C2ME's OpenCL module** (`c2me-opts-accel-opencl`). Both move world generation to the graphics
@@ -47,8 +51,9 @@ own terrain maps on top (heightmaps, erosion, rivers, cliffs). Worldgen Accelera
 1. **On the CPU**: it removes repeated or wasted work in Minecraft's and FreeTerraForged's code, such as filling
    terrain far above the ground, re-making FreeTerraForged's terrain tiles, looking chunks up again and again for ores,
    or working the same terrain out once per thread. These work on any PC.
-2. **On the GPU**: whole steps are rewritten as CUDA programs that do a chunk (or a FreeTerraForged tile) in one go on
-   the graphics card, operation for operation the same maths as the Java code, so the results are bit-identical. The
+2. **On the GPU**: whole steps are rewritten as GPU programs (CUDA C, which AMD's HIP compiles too) that do a chunk (or
+   a FreeTerraForged tile) in one go on the graphics card, operation for operation the same maths as the Java code, so
+   the results are bit-identical. The
    GPU programs are built when a world loads, from the world's own settings, datapacks and biome mods, so they follow
    whatever the world uses. A copy is kept on disk (`wgaccel-gpu-cache`), so a world loads them again at once.
 
@@ -64,10 +69,10 @@ threads).
 
 ## What runs on the CPU and what on the GPU
 
-| Step | GPU (NVIDIA) | CPU |
+| Step | GPU (NVIDIA, or AMD on Windows) | CPU |
 | --- | --- | --- |
 | FreeTerraForged's terrain tiles (1.0.0010) | the tile noise (terrain populators), the erosion filter | a bigger tile cache (`tileCacheTiles`) |
-| FreeTerraForged's chunk cells (1.0.0013 "deleteTiles") | | made once per chunk instead of three times (`ftfSharedChunkCells`) |
+| FreeTerraForged's chunk cells (1.0.0013 "deleteTiles") | | made once per chunk instead of three times (`ftfSharedChunkCells`; earlier 1.0.0013 builds only, it turns itself off on later ones) |
 | Biomes | climate sampling, the biome table search, FreeTerraForged's biome decoration (cave biomes, rivers) | faster biome choice: FreeTerraForged's repeated look-ups reused (`fasterBiomeChoice`) |
 | 3D terrain (noise fill) | density, aquifers, ore veins, structure terrain (Beardifier) | fill only up to the ground (`fillToGround`) |
 | Surface | the surface rules (grass, sand, snow, FreeTerraForged's strata) | direct block reads (`fastSurfaceReads`) |
@@ -106,20 +111,46 @@ The same on a dedicated server (same PC, the card free): 0:47.
 | --- | --- | --- | --- |
 | FreeTerraForged + Terralith + Biomes O' Plenty + Regions Unexplored, overworld r1000 | 2:49 | 0:57 | 2.9x |
 | FreeTerraForged 1.0.0010 (22 Oct unstable, a 1,152-block world), overworld r2000 (63,001 chunks) | not measured | 3:14 (325 chunks/s) | |
-| FreeTerraForged 1.0.0013 "deleteTiles", overworld r1000: before and after the mod's fixes for its new chunk cells (with `gpuAreaStep` on) | 60-90 chunks/s | 1:53 (152 chunks/s) | about 2x |
+| FreeTerraForged 1.0.0013 "deleteTiles" (an earlier build), overworld r1000: before and after the mod's fixes for its new chunk cells (with `gpuAreaStep` on) | 60-90 chunks/s | 1:53 (152 chunks/s) | about 2x |
 | FreeTerraForged 1.0.0010 with the 4 x 4 area step (`gpuAreaStep`, off by default) | 0:46 | 0:44 | 1.05x |
 | Vanilla overworld, radius 2000 (63,001 chunks), with `gpuAreaStep` on (it turns the GPU on in vanilla) | 2:15 | 1:22 | 1.65x |
 | Vanilla overworld, radius 2000, default settings (CPU parts only in vanilla) | 2:15 | 1:58 | 1.14x |
 
 Every check in these runs was identical. Your PC, mods and settings will give other numbers.
 
+**AMD desktop (0.16.1, HIP):** AMD Ryzen 7 7800X3D (8 cores, 16 threads), AMD Radeon RX 9070 XT 16 GB, Windows 11,
+Java 25, 16 GB heap (`-Xmx16G`, ZGC), AMD HIP SDK 6.4, NeoForge 21.1.264, C2ME 0.4.0-alpha.0.123 (its default
+threads), Lithium, ScalableLux, Sodium. FreeTerraForged 1.0.0010, Chunky radius 1000 (16,129 chunks), a new world
+each time:
+
+| Setup | Time | Chunks/s | Speed-up |
+| --- | --- | --- | --- |
+| Without Worldgen Accelerator | 4:20 | 62 | 1.00x |
+| CPU improvements only (`gpuImprovements = false`) | 2:31 | 107 | 1.72x |
+| CPU and GPU improvements (4 runs: 1:02, 0:59, 0:59, 1:00) | **1:00** | **269** | **4.3x** |
+
+The card made the CPU improvements alone 2.5x faster again. Every GPU check was identical.
+
+**AMD laptop (0.16.0, HIP):** AMD Ryzen 9 6900HX (8 cores, 16 threads), AMD Radeon 680M (integrated, shares the
+system memory), 32 GB DDR5, Windows 11, Java 21, 12 GB heap, AMD HIP SDK 6.4, C2ME 0.4.0-alpha.0.123 (its default 7
+threads), Sodium, Iris. FreeTerraForged 1.0.0010, Chunky radius 300 (1,521 chunks), a new world each time. Short runs,
+each measured once, so the times are rough:
+
+| Setup | Time | Chunks/s | Speed-up |
+| --- | --- | --- | --- |
+| Without Worldgen Accelerator | 0:42 | 36 | 1.00x |
+| CPU improvements only (`gpuImprovements = false`) | 0:28 | 54 | 1.50x |
+| CPU and GPU improvements | **0:15** | **101** | **2.80x** |
+
+Even a laptop's integrated graphics almost doubled the speed of the CPU improvements alone. Every check was identical.
+
 ## Supported versions and mods
 
 | | Version | Notes |
 | --- | --- | --- |
 | Minecraft | 1.21.1 | |
-| NeoForge | 21.1.x (tested 21.1.249 to 21.1.255) | no Fabric version |
-| FreeTerraForged | **1.0.0010 from the `1.21.1_unstable` branch** (22 Oct 2026), and **1.0.0013 from the `deleteTiles` branch** | both checked; older 1.0.0010 builds work too. The GPU tile parts are for 1.0.0010 (tiles); 1.0.0013 has no tiles and gets its own CPU fixes. When FreeTerraForged fixes one of these slow paths itself, the mod's fix turns itself off. |
+| NeoForge | 21.1.x (tested 21.1.249 to 21.1.264) | no Fabric version |
+| FreeTerraForged | **1.0.0010 from the `1.21.1_unstable` branch** (22 Oct 2026); **1.0.0013 from the `deleteTiles` branch: experimental support for now** | 1.0.0010 checked; older 1.0.0010 builds work too. The GPU tile parts are for 1.0.0010 (tiles); 1.0.0013 has no tiles, and the branch still changes often. When FreeTerraForged fixes one of these slow paths itself, the mod's fix turns itself off. |
 | C2ME | 0.4.0-alpha.0.123 (recommended) | 19 threads on the test PC; the 4 x 4 area step (`gpuAreaStep`) needs it |
 | C2ME OpenCL module | | **not together**: Worldgen Accelerator turns itself off |
 | Lithium | 0.15.4 | works, recommended |
@@ -150,7 +181,7 @@ settings. If one doesn't, the checks turn the affected part off and the log says
 
 1. Install NeoForge 21.1.x for Minecraft 1.21.1, then FreeTerraForged (and C2ME, Lithium and ScalableLux if you like).
 2. Put `wgaccel-<version>.jar` into the instance's `mods` folder. That's all for the CPU improvements.
-3. **For the GPU parts (NVIDIA only):**
+3. **For the GPU parts on an NVIDIA card:**
    1. Update the NVIDIA driver.
    2. Install the **NVIDIA CUDA Toolkit 12.x** from https://developer.nvidia.com/cuda-toolkit-archive (12.9 was
       tested; pick Windows, x86_64, your Windows version, "exe (network)") with the default ("Express") install.
@@ -158,21 +189,41 @@ settings. If one doesn't, the checks turn the affected part off and the log says
       dropped it); an RTX 50xx needs 12.8 or newer.
    3. **Restart the launcher** (or the PC): a launcher that was open during the install doesn't see the new
       `CUDA_PATH`.
-4. Start the game and open a world. The log (`logs/latest.log`) should show
+4. **For the GPU parts on an AMD card (Windows):**
+   1. Update the AMD Adrenalin driver. It comes with AMD's HIP runtime (`amdhip64_6.dll` in `C:\Windows\System32`).
+   2. Install the **AMD HIP SDK for Windows** (6.4 was tested) from https://www.amd.com/en/developer/resources/rocm-hub/hip-sdk.html.
+      Only its **hipRTC** part (the runtime compiler, `hiprtc*.dll`) is used.
+   3. **Restart the launcher** (or the PC), as for NVIDIA.
+5. Start the game and open a world. The log (`logs/latest.log`) should show `WGA GPU backend: CUDA` or `HIP`,
    `WGA GPU self-test: BIT-IDENTICAL` and lines like `WGA GPU noise fill: ready`. If the GPU can't be used it says
    `WGA GPU unavailable: <why>` and the mod carries on with the CPU part.
 
+**NVIDIA or AMD:** when NVIDIA's driver is installed and sees a card the mod uses CUDA (so a laptop with an NVIDIA
+card and AMD integrated graphics uses the NVIDIA card); otherwise HIP, if AMD's runtime sees a card. An NVIDIA driver
+left behind from a former card doesn't count. Start Java with
+`-Dwgaccel.gpuBackend=cuda` or `hip` to choose yourself.
+
+**Which GPU:** on a PC with more than one (a desktop Ryzen's own small Radeon beside the graphics card, for example)
+the mod takes the one with the most compute units, a separate card before an integrated one. The log's
+`WGA GPU self-test: device` line lists the GPUs it found and says which it took; `gpuDevice` in the config chooses
+another (0, 1, ... as that line numbers them).
+
 The mod looks for `nvrtc64_*.dll` in `CUDA_PATH` and every `CUDA_PATH_V*` (`bin` and `bin/x64`), then in
 `C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v*` (newest first), then on `PATH`. To point it somewhere else,
-start Java with `-Dwgaccel.nvrtc=C:/path/to/nvrtc64_120_0.dll`.
+start Java with `-Dwgaccel.nvrtc=C:/path/to/nvrtc64_120_0.dll`. For AMD it looks for `hiprtc*.dll` in the `bin`
+folder of `HIP_PATH` and every other `HIP_PATH*`, then in `C:/Program Files/AMD/ROCm/*/bin` (newest first), then on
+`PATH`; `-Dwgaccel.hiprtc=C:/path/to/hiprtc0604.dll` points it somewhere else.
+
+On AMD cards the `/wgaccel` report leaves out the GPU time of each step: timing them with GPU events made the results
+wrong on the Radeon 680M, so the mod doesn't time them there (the work and its results are the same).
 
 The first world takes a few seconds to a minute longer to open while the GPU programs are built (the loading screen
 shows it); after that they come from the disk cache.
 
 ## Installation (dedicated server)
 
-A dedicated server needs the same CUDA Toolkit as a client (step 3 above), and LWJGL, which a client has and a server
-doesn't:
+A dedicated server needs the same CUDA Toolkit (NVIDIA) or HIP SDK (AMD) as a client (steps 3 and 4 above), and
+LWJGL, which a client has and a server doesn't:
 
 1. Put the mod's jar (and FreeTerraForged, C2ME, ...) into the server's `mods` folder.
 2. Copy `lwjgl-3.3.3.jar` and `lwjgl-3.3.3-natives-windows.jar` from a client's `libraries/org/lwjgl/lwjgl/3.3.3/`
@@ -202,8 +253,14 @@ FreeTerraForged tile cache (`tileCacheTiles = 256`) takes about 1.7 GB more. Wit
 lot once it fills (the collector runs all the time): give it more, or lower `chunkyMaxWorkingCount`. ZGC (`-XX:+UseZGC -XX:+ZGenerational`) was used on
 the test PC; leave the rest of the JVM flags as your launcher sets them. Graphics card memory: a few hundred MB.
 
-**Java:** Java 21 (Minecraft 1.21.1's own) works. All the measurements above were made on Java 25; the difference
-between Java 21 and 25 for this mod **has not been measured**.
+**C2ME's workers:** C2ME's default number of worker threads leaves much of the CPU idle once the GPU parts take work
+off it: on a 16-thread CPU it ran 7 workers, busy only about 60% of the time, with the CPU 11 of 16 busy. Setting
+`globalExecutorParallelism = 12` in `config/c2me.toml` made the same pregeneration about 19% faster (RX 9070 XT
+PC). About three quarters of your CPU threads is a good start; the log's
+`WGA hint` line suggests a number when C2ME is on its default.
+
+**Java:** Java 21 (Minecraft 1.21.1's own) works. The radius 1000 measurements above were made on Java 25 (the AMD
+laptop's on Java 21); the difference between Java 21 and 25 for this mod **has not been measured**.
 
 ## Config
 
@@ -215,13 +272,14 @@ say how much they gained on the test PC.
 | top | `preset`: `AUTO` (default: `CLIENT` in the game, `SERVER` on a dedicated server), `CLIENT`, `SERVER` (the measured best for each), or `CUSTOM` (every setting as written in the file) |
 | `[general]` | `chunkyMaxWorkingCount` (Chunky's chunks in flight; 0 = automatic from the heap and the world's height), `memoryReport` (off; logs what holds the memory, for a bug report) |
 | `[cpu]` | **`cpuImprovements`** (all CPU improvements on or off), then each one: `fillToGround`, `tileCacheTiles`, `fasterBiomeChoice`, `fastOres`, `fastSurfaceReads`, `carverBiomesFromChunk`, `ftfFastPlacementScopes`, `ftfSharedChunkCells`, `fastBlockPredicates` (off: it was slower) |
-| `[gpu]` | **`gpuImprovements`** (all GPU improvements on or off: off, the card is never touched), `gpuTestedWarning` (the chat warning), then each GPU step: `gpuTileNoise`, `gpuErosionFilter`, `gpuCliffRelaxation`, `gpuNoiseFill`, `gpuLookAhead`, `gpuStructures`, `gpuBiomes`, `gpuBiomesAhead`, `gpuBiomeDecoration`, `gpuSurface`, `gpuSurfaceAhead`, the dimension and vanilla switches, `gpuAreaStep` |
+| `[gpu]` | **`gpuImprovements`** (all GPU improvements on or off: off, the card is never touched), `gpuTestedWarning` (the chat warning), `gpuDevice` (which GPU; -1 = automatic), then each GPU step: `gpuTileNoise`, `gpuErosionFilter`, `gpuCliffRelaxation`, `gpuNoiseFill`, `gpuLookAhead`, `gpuStructures`, `gpuBiomes`, `gpuBiomesAhead`, `gpuBiomeDecoration`, `gpuSurface`, `gpuSurfaceAhead`, the dimension and vanilla switches, `gpuAreaStep` |
 | `[gpu.tuning]` | how GPU work is queued and batched (queue limits, batch sizes, threads, priorities). The defaults are the measured best. Also two checking tools: `gpuFillCheckEvery` (64; 1 compares every GPU chunk with the normal fill, slow) and `gpuFillDebugChunks` (chunks always compared and saved for a bug report). |
 
 The GPU steps take `OFF`, `CHECK` (the GPU and the CPU both do the work and every result is compared: slower, for
 testing) or `ON` (the GPU's result is used; every 64th is still compared). With `CLIENT` or `SERVER` the values in the
 file are kept but not used; set `preset = "CUSTOM"` to change single settings. The section switches,
-`gpuTestedWarning`, `fastBlockPredicates`, `gpuAreaStep` and `gpuNoiseFillCpuDimensions` always follow the file.
+`gpuTestedWarning`, `gpuDevice`, `fastBlockPredicates`, `gpuAreaStep` and `gpuNoiseFillCpuDimensions` always follow
+the file.
 
 `/wgaccel` in game shows what world generation did since the world opened (or since `/wgaccel reset`): chunks per
 second, time per step, what the GPU did and every check's result.
@@ -229,9 +287,14 @@ second, time per step, what the GPU did and every check's result.
 ## Building from source
 
 Put a FreeTerraForged 1.0.0010 jar into `libs/` as `libs/freeterraforged-1.0.0010.jar` (or pass `-PftfJar=<path>`),
-then run `gradlew build`; the mod is `build/libs/wgaccel-<version>.jar`. The offline GPU checks (`gradlew
-cudaCompileCheck` and the other `cuda*` tasks) need the CUDA Toolkit, and some read files the mod saves into the
-game's logs folder: pass `-Plogs=<instance>/logs`.
+and into `libs/c2me/` the jars inside the C2ME jar's `META-INF/jars/` that the build compiles against:
+`c2me-neoforge-base-<version>-all.jar`, `c2me-neoforge-rewrites-chunk-system-<version>.jar`, `rxjava-*.jar` and
+`reactive-streams-*.jar`. Then run `gradlew build`; the mod is `build/libs/wgaccel-<version>.jar`.
+
+The offline GPU checks (`gradlew cudaCompileCheck` and the other `cuda*` tasks) need the CUDA Toolkit, and some read
+files the mod saves into the game's logs folder: pass `-Plogs=<instance>/logs`. On an AMD card, `gradlew hipCheck`
+is the self-test (plus the fixed kernels compiled with hipRTC), and the `cuda*` checks run through HIP with
+`-PgpuBackend=hip`; they need the HIP SDK.
 
 ## Licence
 

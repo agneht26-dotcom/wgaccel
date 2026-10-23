@@ -248,16 +248,21 @@ public final class GpuNoiseFill {
          return;
       }
 
+      // On the world-loading screen's list too (0.17.2): loaded after the overworld, so after its reset.
+      com.wgaccel.gpu.GpuPrepare.Task task = com.wgaccel.gpu.GpuPrepare.begin("noise fill (" + level.dimension().location().getPath() + ")");
       Thread thread = new Thread(() -> {
          long start = System.nanoTime();
          try {
             Program built = build(level);
             OTHERS.put(built.random(), built);
+            task.done();
             WorldgenAccelerator.LOG.info(String.format(Locale.ROOT, "WGA GPU noise fill (%s): ready in %.0f ms (aquifer %s, ore veins %s)", name,
                (System.nanoTime() - start) / 1.0e6, built.aquiferKind == 0 ? "disabled" : built.aquiferKind == 2 ? "C2ME's" : "vanilla's", built.veins ? "on" : "off"));
          } catch (DensityCodegen.Unsupported unsupported) {
+            task.failed(unsupported.kind);
             com.wgaccel.WgaChat.warnOff("WGA GPU noise fill off in " + name + ": the density function kind {} has no GPU version", unsupported.kind);
          } catch (Throwable failure) {
+            task.failed(failure.toString());
             com.wgaccel.WgaChat.warnOff("WGA GPU noise fill off in " + name + ": {}", failure.toString());
          }
       }, "WGA GPU noise fill compile " + name);
@@ -1459,7 +1464,11 @@ public final class GpuNoiseFill {
          NoiseChunk noise = ((com.wgaccel.mixin.access.ChunkAccessAccessor)chunk).wgaccel$noiseChunk();
          String origin = (pending.fromAhead ? "the look-ahead" : "the noise step") + (noise != null
             && DensityTap.hasStructures(((NoiseChunkAccessor)noise).wgaccel$beardifier()) ? ", with structure terrain" : ", no structure terrain");
-         SurfaceAhead.filled(chunk, noise, pending.codes, pending.program.table, pending.minCellY, pending.cellCountY, pending.cellHeight, origin);
+         // A noise-step fill's codes are the thread's own buffer, which its next chunk overwrites: kept as a copy. Kept
+         // as they were, a chunk's surface step found another chunk's codes (22 Oct 2026, RX 9070 XT, radius 1000: the
+         // codes check's lava-for-stone chunk, 10,689 blocks, "filled by the noise step"). A look-ahead result's are its own.
+         byte[] codes = pending.fromAhead ? pending.codes : Arrays.copyOf(pending.codes, 256 * pending.cellCountY * pending.cellHeight);
+         SurfaceAhead.filled(chunk, noise, codes, pending.program.table, pending.minCellY, pending.cellCountY, pending.cellHeight, origin);
       } catch (Throwable failure) {
          // Never break the noise step: the chunk's surface then goes the usual way.
          SurfaceAhead.failed(chunk, failure);

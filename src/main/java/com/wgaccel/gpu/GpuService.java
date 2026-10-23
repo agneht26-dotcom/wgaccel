@@ -105,6 +105,13 @@ public final class GpuService {
       thread.start();
    }
 
+   /** Queues a job for one of the GPU threads without waiting for it (G6c: {@link ErosionGridBatch}, which reports back itself). */
+   static void post(java.util.function.Consumer<Gpu> job) throws Exception {
+      GpuService service = service();
+      gpu(service);
+      service.jobs.add(job);
+   }
+
    /** Runs a job on one of the GPU threads (with that thread's Gpu) and waits for its result. */
    public static <T> T call(Function<Gpu, T> job) throws Exception {
       GpuService service = service();
@@ -118,7 +125,10 @@ public final class GpuService {
          }
       });
       try {
-         return result.get();
+         // Never forever: a job past this is the caller's failure (it then does the work on the CPU and turns its part off).
+         return result.get(60L, java.util.concurrent.TimeUnit.SECONDS);
+      } catch (java.util.concurrent.TimeoutException late) {
+         throw new IllegalStateException("a GPU job did not finish in 60 s");
       } catch (ExecutionException failure) {
          throw failure.getCause() instanceof Exception exception ? exception : new IllegalStateException(failure.getCause());
       }

@@ -15,12 +15,16 @@
     "BiomeRegionMixin",
     "BiomeStageMixin",
     "ErosionFilterMixin",
+    "ErosionGridMixin",
     "CliffRelaxationMixin",
     "TileNoiseGeneratorMixin",
     "TileNoiseHeightmapMixin",
     "TileNoisePopulatorMixin",
     "FtfPlacementScopesMixin",
     "ChunkCellsMixin",
+    "RawChunkCacheMixin",
+    "RawChunkBlocksMixin",
+    "RiverSkipMixin",
     "SurfaceEnvelopeMixin"
   ],
   "injectors": {
